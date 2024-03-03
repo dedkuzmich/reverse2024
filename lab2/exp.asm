@@ -1,4 +1,4 @@
-;; Compile: 
+;; Compile:
 ;; $ nasm -f win64 exp.asm -o exp.obj && gcc exp.obj -o exp.exe && ./exp.exe
 ;; Format:
 ;; $ nasmfmt -oi 12 exp.asm
@@ -8,7 +8,7 @@
         extern      strlen
         extern      itoa
         extern      system
-        
+
         extern      GetStdHandle
         extern      WriteFile
         extern      ExitProcess
@@ -79,9 +79,8 @@ WinMain:
 
         ; Print num
         mov         rcx, qword [iNum1]
+        mov         rdx, 10
         call        PrintNum
-        lea         rcx, [endl]
-        call        PrintStr
 
         ; Print str
         lea         rcx, [szMsg2]
@@ -100,28 +99,34 @@ WinMain:
         %pop       
 
 
-;; void PrintNum (int iNum)
+;; void PrintNum (int iNum, int Radix)
 ;; iNum = rcx
+;; iRadix = rdx
 PrintNum:
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 0
         %local      iNum:qword
+        %local      iRadix:qword               ; Base [2, 4, 8, 10, 16]
         %local      szNum:byte[24]
         enter       %$localsize, 0
         save_regs  
 
         ; Save argument(s) as local var(s)
         mov         qword [iNum], rcx
+        mov         qword [iRadix], rdx
 
         ; Convert int to string
         mov         rcx, qword [iNum]
         lea         rdx, [szNum]
-        mov         r8, 10
+        mov         r8, qword [iRadix]
         call        itoa
 
         ; Print string
         lea         rcx, [szNum]
+        call        PrintStr
+
+        lea         rcx, [endl]
         call        PrintStr
 
         restore_regs
@@ -139,7 +144,6 @@ PrintStr:
         %assign     %$localsize 0
         %local      pStr:qword                 ; Pointer to string
         %local      cbStr:qword                ; Length of string
-        %local      cbWritten:qword
         %local      hStdOut:qword
         enter       %$localsize, 0
         save_regs  
@@ -161,7 +165,7 @@ PrintStr:
         mov         rcx, qword [hStdOut]
         mov         rdx, qword [pStr]
         mov         r8, qword [cbStr]
-        mov         r9, qword [cbWritten]
+        mov         r9, 0
         call        WriteFile
 
         restore_regs
