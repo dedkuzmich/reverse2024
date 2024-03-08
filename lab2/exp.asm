@@ -107,10 +107,14 @@ PrintNum:
         %stacksize  flat64
         %assign     %$localsize 0
         %local      iNum:qword
-        %local      iRadix:qword               ; Base [2, 4, 8, 10, 16]
+        %local      iRadix:qword               ; Base [2, 10, 16]
         %local      szNum:byte[24]
         enter       %$localsize, 0
         save_regs  
+
+        ; Set rsi, rdi to 0 for itoa() correct work
+        mov         rsi, 0
+        mov         rdi, 0
 
         ; Save argument(s) as local var(s)
         mov         qword [iNum], rcx
@@ -120,7 +124,7 @@ PrintNum:
         mov         rcx, qword [iNum]
         lea         rdx, [szNum]
         mov         r8, qword [iRadix]
-        call        itoa
+        call        _ui64toa
 
         ; Print string
         lea         rcx, [szNum]
@@ -148,6 +152,9 @@ PrintStr:
         enter       %$localsize, 0
         save_regs  
 
+        mov         rsi, 0
+        mov         rdi, 0
+
         ; Save argument(s) as local var(s)
         mov         qword [pStr], rcx
 
@@ -172,3 +179,4 @@ PrintStr:
         leave      
         ret        
         %pop       
+    
