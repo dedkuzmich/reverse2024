@@ -84,7 +84,9 @@ WinMain:
         %local      iNum3:qword
         enter       %$localsize, 0
 
-        mov         qword [iNum1], 0xaaaa
+        ; Save value in the local var
+        mov         qword [iNum1], 0x55ff99
+
 
         ; Loop
         mov         r12, 0
@@ -107,6 +109,30 @@ WinMain:
         call        PrintNum
 
 
+        ; Condition
+        mov         rax, 0
+        cmp         rax, 1
+        je          .print_msg1                ; if rax == 1
+        cmp         rax, 2
+        je          .print_msg2                ; elif rax == 2
+        jmp         .print_msg3                ; else
+
+.print_msg1:
+        lea         rcx, [szMsg1]
+        call        PrintStr
+        jmp         .next
+
+.print_msg2:
+        lea         rcx, [szMsg2]
+        call        PrintStr
+        jmp         .next
+
+.print_msg3:
+        lea         rcx, [szMsg3]
+        call        PrintStr
+        jmp         .next
+
+.next:
         ; Exit
         lea         rcx, [szPause]
         call        system
