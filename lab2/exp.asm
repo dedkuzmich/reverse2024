@@ -6,8 +6,9 @@
 
         extern      puts
         extern      strlen
-        extern      itoa
+        extern      _ui64toa
         extern      system
+        extern      strcmp
 
         extern      GetStdHandle
         extern      WriteFile
@@ -20,8 +21,8 @@
 ;; Save and restore volatile (preserved) registers excluding rsp, rbp
         %macro      save_regs 0
         push        rbx
-        push        rdi
         push        rsi
+        push        rdi
         push        r12
         push        r13
         push        r14
@@ -29,13 +30,13 @@
         %endmacro  
 
         %macro      restore_regs 0
-        pop         rbx
+        pop         r15
+        pop         r14
+        pop         r13
+        pop         r12
         pop         rdi
         pop         rsi
-        pop         r12
-        pop         r13
-        pop         r14
-        pop         r15
+        pop         rbx
         %endmacro  
 
 
@@ -54,47 +55,89 @@ szMsg1:
         db          "msg1", 10, 0
 
 szMsg2:
-        db          "Hello, world! I love pizza.", 10, 0
+        db          "msg2", 10, 0
+        
+szMsg3:
+        db          "msg3", 10, 0
 
+szWinExec:
+        db          "WinExec", 0
 
 
         section     .bss
 szBuffer:
         resb        24
 
+buf:
+        resq        1
 
 
         section     .text
 ;; void WinMain()
 WinMain:
+        save_regs
         %push       proc_context
         %stacksize  flat64
-        %assign     %$localsize 0
+        %assign     %$localsize 64
         %local      iNum1:qword
+        %local      iNum2:qword
+        %local      iNum3:qword
+        %local      pKernel32:qword
+        %local      cFunctions:qword
+        %local      pFunctions:qword
+        %local      pNames:qword
+        %local      pNameOrdinals:qword
+        %local      pName:qword
         enter       %$localsize, 0
-        save_regs  
+        
 
-        ; Init local vars
-        mov         qword [iNum1], 1337
+        ; kernel32.dll base
+        mov         rbx, [gs:0x60]             ; PEB
+        mov         rbx, [rbx + 0x18]          ; LDR
+        mov         rbx, [rbx + 0x20]          ; InMemoryOrderModuleList (1st entry)
+        mov         rbx, [rbx]                 ; 2 ntdll.dll
+        mov         rbx, [rbx]                 ; 3 kernel32.dll
+        mov         rbx, [rbx + 0x20]          ; InInitializationOrderLinks (1st entry)
+        mov         qword [pKernel32], rbx     ; kernel32.dll base address
 
-        ; Print num
-        mov         rcx, qword [iNum1]
-        mov         rdx, 10
+        mov         rcx, qword [pKernel32]
+        mov         rdx, 16
         call        PrintNum
+        
+        ; kernel32.dll functions
+        mov         r10, qword [pKernel32]      ; kernel32.dll base (DOS header)
+        mov         ebx, [r10 + 0x3c]           ; NT header offset
+        add         rbx, r10                    ; NT header
+        mov         ebx, [rbx + 0x18 + 0x70]    ; Export Directory RVA
+        add         rbx, r10                    ; Export Directory
+        
+        mov         ecx, [rbx + 0x14]           ; NumberOfFunctions
+        mov         qword [cFunctions], rcx
 
-        ; Print str
-        lea         rcx, [szMsg2]
-        call        PrintStr
-
-
+        mov         ecx, [rbx + 0x1c]           ; AddressOfFunctions RVA
+        add         rcx, r10                    ; AddressOfFunctions
+        mov         qword [pFunctions], rcx
+        
+        mov         ecx, [rbx + 0x20]           ; AddressOfNames RVA
+        add         rcx, r10                    ; AddressOfNames
+        mov         qword [pNames], rcx
+        
+        mov         ecx, [rbx + 0x24]           ; AddressOfNameOrdinals RVA
+        add         rcx, r10                    ; AddressOfNameOrdinals
+        mov         qword [pNameOrdinals], rcx
+        
+        mov         rcx, qword [pNames]
+        mov         rdx, 16
+        call        PrintNum
+        
+               
+        ; Find WinExec()       
+        ; WIP
+        
+        
         ; Exit
-        lea         rcx, [szPause]
-        call        system
-        mov         rcx, 0
-        call        ExitProcess
-
+        leave
         restore_regs
-        leave      
         ret        
         %pop       
 
@@ -103,20 +146,17 @@ WinMain:
 ;; iNum = rcx
 ;; iRadix = rdx
 PrintNum:
+        save_regs 
         %push       proc_context
         %stacksize  flat64
-        %assign     %$localsize 0
+        %assign     %$localsize 64
         %local      iNum:qword
         %local      iRadix:qword               ; Base [2, 10, 16]
         %local      szNum:byte[24]
-        enter       %$localsize, 0
-        save_regs  
+        enter       %$localsize, 0 
 
-        ; Set rsi, rdi to 0 for itoa() correct work
         mov         rsi, 0
         mov         rdi, 0
-
-        ; Save argument(s) as local var(s)
         mov         qword [iNum], rcx
         mov         qword [iRadix], rdx
 
@@ -129,12 +169,11 @@ PrintNum:
         ; Print string
         lea         rcx, [szNum]
         call        PrintStr
-
         lea         rcx, [endl]
         call        PrintStr
 
-        restore_regs
-        leave      
+        leave
+        restore_regs   
         ret        
         %pop       
 
@@ -143,15 +182,17 @@ PrintNum:
 ;; void PrintStr (PSTR pStr)
 ;; pStr = rcx
 PrintStr:
+        save_regs
         %push       proc_context
         %stacksize  flat64
-        %assign     %$localsize 0
+        %assign     %$localsize 64             ; Shadow space (32) + space for stack args (32)
         %local      pStr:qword                 ; Pointer to string
         %local      cbStr:qword                ; Length of string
+        %local      cbWritten:qword
         %local      hStdOut:qword
-        enter       %$localsize, 0
-        save_regs  
-
+        enter       %$localsize, 0  
+        
+        ; Set rsi, rdi to 0 for iterators correct work
         mov         rsi, 0
         mov         rdi, 0
 
@@ -172,11 +213,11 @@ PrintStr:
         mov         rcx, qword [hStdOut]
         mov         rdx, qword [pStr]
         mov         r8, qword [cbStr]
-        mov         r9, 0
+        lea         r9, [cbWritten]
+        mov         qword [rsp+32], 0           ; 5th arg. 6th arg should be passed with [rsp+40]
         call        WriteFile
 
+        leave
         restore_regs
-        leave      
         ret        
         %pop       
-    
