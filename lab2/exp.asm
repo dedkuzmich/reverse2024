@@ -61,7 +61,17 @@ szMsg3:
         db          "msg3", 10, 0
 
 szWinExec:
-        db          "WinExec", 0
+        db          "WinExec", 0                        ; kernel32.dll
+        ;db          "CsrAllocateCaptureBuffer", 0       ; ntdll.dll
+
+szCalc:
+        db          "calc.exe", 0
+
+WIN:
+        db          10, "WIN", 10, 0
+        
+task:
+        db          10, "Name idx -> ordinal -> addr", 10, 0
 
 
         section     .bss
@@ -70,6 +80,7 @@ szBuffer:
 
 buf:
         resq        1
+
 
 
         section     .text
@@ -82,12 +93,19 @@ WinMain:
         %local      iNum1:qword
         %local      iNum2:qword
         %local      iNum3:qword
+        
         %local      pKernel32:qword
-        %local      cFunctions:qword
+        
+        %local      iBase:qword
+        %local      cNames:qword
         %local      pFunctions:qword
         %local      pNames:qword
         %local      pNameOrdinals:qword
+        
         %local      pName:qword
+        %local      idxName:qword
+        %local      iOrdinal:qword
+        %local      pWinExec:qword
         enter       %$localsize, 0
         
 
@@ -104,6 +122,7 @@ WinMain:
         mov         rdx, 16
         call        PrintNum
         
+        
         ; kernel32.dll functions
         mov         r10, qword [pKernel32]      ; kernel32.dll base (DOS header)
         mov         ebx, [r10 + 0x3c]           ; NT header offset
@@ -111,9 +130,12 @@ WinMain:
         mov         ebx, [rbx + 0x18 + 0x70]    ; Export Directory RVA
         add         rbx, r10                    ; Export Directory
         
-        mov         ecx, [rbx + 0x14]           ; NumberOfFunctions
-        mov         qword [cFunctions], rcx
-
+        mov         ecx, [rbx + 0x10]           ; Base (ordinals of functions start from 1)
+        mov         qword [iBase], rcx
+        
+        mov         ecx, [rbx + 0x14]           ; NumberOfFNames
+        mov         qword [cNames], rcx
+        
         mov         ecx, [rbx + 0x1c]           ; AddressOfFunctions RVA
         add         rcx, r10                    ; AddressOfFunctions
         mov         qword [pFunctions], rcx
@@ -126,20 +148,93 @@ WinMain:
         add         rcx, r10                    ; AddressOfNameOrdinals
         mov         qword [pNameOrdinals], rcx
         
+        
+        ; EXP AREA
+        lea         rcx, [task]
+        call        PrintStr
+        
+        
+        ; Find name index
         mov         rcx, qword [pNames]
         mov         rdx, 16
         call        PrintNum
+                              
+        mov         r12, 0
+.loop:
+        mov         r10, qword [pNames]
+        mov         ebx, [r10 + 4 * r12]             
+        add         rbx, qword [pKernel32]
+        mov         qword [pName], rbx
+        mov         qword [idxName], r12
+                
+        mov         rcx, qword [pName]
+        mov         rdx, szWinExec
+        call        strcmp        
+        cmp         rax, 0
+        je          .next
         
-               
-        ; Find WinExec()       
-        ; WIP
+        inc         r12     
+        cmp         r12, qword [cNames] ; Max num of iterations
+        jne         .loop
+        
+.next:          
+        mov         rcx, qword [idxName]
+        mov         rdx, 16
+        call        PrintNum
+        
+        
+        ; Find ordinal
+        mov         rcx, qword [pNameOrdinals]
+        mov         rdx, 16
+        call        PrintNum
+        
+        mov         rbx, qword [pNameOrdinals]
+        mov         r10, qword [idxName]
+        mov         ax, [rbx + 2 * r10]
+        add         rax, qword [iBase]
+        mov         qword [iOrdinal], rax
+        
+        mov         rcx, qword [iOrdinal]
+        mov         rdx, 16
+        call        PrintNum
+        
+        
+        ; Find address
+        mov         rcx, qword [pFunctions]
+        mov         rdx, 16
+        call        PrintNum
+        
+        mov         rbx, qword [pFunctions]
+        mov         r10, qword [iOrdinal]
+        sub         r10, qword [iBase]
+        mov         eax, [rbx + 4 * r10]
+        
+        add         rax, qword [pKernel32]
+        mov         qword [pWinExec], rax
+        
+        mov         rcx, qword [pWinExec]
+        mov         rdx, 16
+        call        PrintNum
+        
+        
+        ; Call
+        mov         r10, qword [pWinExec]
+        lea         rcx, [szCalc]
+        mov         rdx, 5
+        call        r10
         
         
         ; Exit
+        lea         rcx, [szPause]
+        call        system
+        mov         rcx, 0
+        call        ExitProcess
+        
         leave
         restore_regs
         ret        
         %pop       
+
 
 
 ;; void PrintNum (int iNum, int Radix)
@@ -195,7 +290,6 @@ PrintStr:
         ; Set rsi, rdi to 0 for iterators correct work
         mov         rsi, 0
         mov         rdi, 0
-
         ; Save argument(s) as local var(s)
         mov         qword [pStr], rcx
 
@@ -220,4 +314,4 @@ PrintStr:
         leave
         restore_regs
         ret        
-        %pop       
+        %pop
