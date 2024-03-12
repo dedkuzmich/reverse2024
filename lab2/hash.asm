@@ -40,7 +40,7 @@
         %endmacro  
 
 
-
+        %define     utf16(x) __?utf16?__(x)    ; UTF-16 macros
         section     .data
 STD_OUTPUT_HANDLE:
         dq          -11
@@ -51,25 +51,28 @@ endl:
 szPause:
         db          "pause", 0
 
+utf16Path:
+        dw          utf16('C:\WINDOWS'), 0     ; UTF-16 string
+
 szMsg1:
         db          "msg1", 10, 0
 
 szMsg2:
         db          "msg2", 10, 0
-        
+
 szMsg3:
         db          "msg3", 10, 0
 
 szWinExec:
-        ;db          "WinExec", 0                        ; kernel32.dll
-        db          "CsrAllocateCaptureBuffer", 0       ; ntdll.dll
-        ;db           "geuggrguerugreiger gjergerijgerjgier ergiregrejgjetr gerhgerhghergerg rhgherghjrejhgre", 0
+        db          "WinExec", 0               ; kernel32.dll
+        ; db          "CsrAllocateCaptureBuffer", 0       ; ntdll.dll
+
 szCalc:
         db          "calc.exe", 0
 
 WIN:
         db          10, "WIN", 10, 0
-        
+
 task:
         db          10, "Name idx -> ordinal -> addr", 10, 0
 
@@ -87,52 +90,75 @@ buf:
         section     .text
 ;; void WinMain()
 WinMain:
-        save_regs
+        save_regs  
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64
         %local      iNum1:qword
         %local      iNum2:qword
         %local      iNum3:qword
-        
+
         %local      pWinExec:qword
+        %local      iHash:qword
         enter       %$localsize, 0
-        
-    
+
+
         lea         rcx, [szWinExec]
         call        PrintStr
         lea         rcx, [endl]
         call        PrintStr
-        
-        
-        
-        lea         esi, [szWinExec]
-compute_hash:
-	xor edi, edi
-	xor eax, eax
-compute_hash_again:
-	lodsb			; load char of function name
-	test al, al		; is it end of function name? \0
-	jz compute_hash_finished ; end
-	ror edi, 0xd		; bitwise shift right
-	add edi, eax
-	jmp compute_hash_again
-compute_hash_finished:
-        mov        ecx, edi
-        mov        rdx, 16
-        call       PrintNum
 
 
+        lea         rcx, [szWinExec]
+        call        Ror13
+        mov         qword [iHash], rax
 
-;        lea         r10, [szWinExec]      
-;        mov         rcx, r10
-;        call        PrintStr
-        
-        
-        leave
+        mov         rcx, qword [iHash]
+        mov         rdx, 16
+        call        PrintNum
+
+
+        leave      
         restore_regs
         ret        
         %pop       
+
+
+
+;; int Ror13 (PSTR pStr)
+;; pStr = rcx
+Ror13:
+        save_regs  
+        %push       proc_context
+        %stacksize  flat64
+        %assign     %$localsize 64
+        %local      pStr:qword
+        enter       %$localsize, 0
+
+        mov         qword [pStr], rcx
+
+        ; Hash loop
+        mov         r10, qword [pStr]
+        mov         r11, 0                     ; Counter
+        mov         r12, 0                     ; Hash
+.next_byte:
+        mov         rbx, 0
+        mov         bl, byte [r10 + r11]       ; Read a byte from string
+        cmp         rbx, 0                     ; Check if current byte = 0
+        je          .end
+
+        ror         r12d, 13                   ; Use r12 to have qword hash, r12d - dword hash
+        add         r12, rbx
+        inc         r11
+        jmp         .next_byte
+.end:
+        mov         rax, r12                   ; Return value is hash
+
+        leave      
+        restore_regs
+        ret        
+        %pop       
+
 
 
 
@@ -140,14 +166,14 @@ compute_hash_finished:
 ;; iNum = rcx
 ;; iRadix = rdx
 PrintNum:
-        save_regs 
+        save_regs  
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64
         %local      iNum:qword
         %local      iRadix:qword               ; Base [2, 10, 16]
         %local      szNum:byte[24]
-        enter       %$localsize, 0 
+        enter       %$localsize, 0
 
         mov         rsi, 0
         mov         rdi, 0
@@ -166,8 +192,8 @@ PrintNum:
         lea         rcx, [endl]
         call        PrintStr
 
-        leave
-        restore_regs   
+        leave      
+        restore_regs
         ret        
         %pop       
 
@@ -176,7 +202,7 @@ PrintNum:
 ;; void PrintStr (PSTR pStr)
 ;; pStr = rcx
 PrintStr:
-        save_regs
+        save_regs  
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64             ; Shadow space (32) + space for stack args (32)
@@ -184,8 +210,8 @@ PrintStr:
         %local      cbStr:qword                ; Length of string
         %local      cbWritten:qword
         %local      hStdOut:qword
-        enter       %$localsize, 0  
-        
+        enter       %$localsize, 0
+
         ; Set rsi, rdi to 0 for iterators correct work
         mov         rsi, 0
         mov         rdi, 0
@@ -207,10 +233,10 @@ PrintStr:
         mov         rdx, qword [pStr]
         mov         r8, qword [cbStr]
         lea         r9, [cbWritten]
-        mov         qword [rsp+32], 0           ; 5th arg. 6th arg should be passed with [rsp+40]
+        mov         qword [rsp+32], 0          ; 5th arg. 6th arg should be passed with [rsp+40]
         call        WriteFile
 
-        leave
+        leave      
         restore_regs
         ret        
-        %pop
+        %pop       
