@@ -39,6 +39,7 @@
         pop         rbx
         %endmacro  
 
+        %define     utf16(x) __?utf16?__(x)    ; UTF-16 macros
 
 
         section     .data
@@ -59,6 +60,9 @@ szMsg2:
 
 szMsg3:
         db          "msg3", 10, 0
+
+utf16Path:
+        dw          utf16('C:\WINDOWS'), 0     ; UTF-16 string
 
 szWinExec:
         db          "WinExec", 0
