@@ -39,7 +39,21 @@
         pop         rbx
         %endmacro  
 
+
+;; Align %$localsize to 16 bytes and enter
+        %macro      align_enter 1
+        %assign     %%size %1
+        %assign     %%module %%size % 16
+        %if         %%module != 0              ; Make %%size a multiple of 16
+        %assign     %%diff 16 - %%module
+        %assign     %%size %%size + %%diff
+        %endif     
+        enter       (%%size + 8), 0            ; Add 8 to compensate "%push proc_context"
+        %endmacro  
+
+
         %define     utf16(x) __?utf16?__(x)    ; UTF-16 macros
+
 
 
         section     .data
@@ -68,12 +82,14 @@ szWinExec:
         db          "WinExec", 0
 
 
+
         section     .bss
 szBuffer:
         resb        24
 
 buf:
         resq        1
+
 
 
         section     .text
@@ -86,7 +102,7 @@ WinMain:
         %local      iNum1:qword
         %local      iNum2:qword
         %local      iNum3:qword
-        enter       %$localsize, 0
+        align_enter %$localsize
 
         ; Save value in the local var
         mov         qword [iNum1], 0x55ff99
@@ -94,7 +110,7 @@ WinMain:
 
         ; Loop
         mov         r12, 0
-.loop:
+.nextMessage:
         mov         rcx, r12
         mov         rdx, 16
         call        PrintNum
@@ -104,7 +120,7 @@ WinMain:
 
         inc         r12
         cmp         r12, 4
-        jne         .loop
+        jne         .nextMessage
 
 
         ; Print local var
@@ -161,7 +177,7 @@ PrintNum:
         %local      iNum:qword
         %local      iRadix:qword               ; Base [2, 10, 16]
         %local      szNum:byte[24]
-        enter       %$localsize, 0
+        align_enter %$localsize
 
         mov         rsi, 0
         mov         rdi, 0
@@ -198,7 +214,7 @@ PrintStr:
         %local      cbStr:qword                ; Length of string
         %local      cbWritten:qword
         %local      hStdOut:qword
-        enter       %$localsize, 0
+        align_enter %$localsize
 
         ; Set rsi, rdi to 0 for iterators correct work
         mov         rsi, 0
