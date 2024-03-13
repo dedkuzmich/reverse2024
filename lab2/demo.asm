@@ -79,7 +79,8 @@ utf16Path:
         dw          utf16('C:\WINDOWS'), 0     ; UTF-16 string
 
 szWinExec:
-        db          "WinExec", 0
+        db          "WinExec", 0               ; kernel32.dll
+        ; db          "CsrAllocateCaptureBuffer", 0       ; ntdll.dll
 
 
 
@@ -102,6 +103,7 @@ WinMain:
         %local      iNum1:qword
         %local      iNum2:qword
         %local      iNum3:qword
+        %local      iHash:qword
         align_enter %$localsize
 
         ; Save value in the local var
@@ -153,6 +155,20 @@ WinMain:
         jmp         .next
 
 .next:
+        ; Hash:
+        lea         rcx, [szWinExec]
+        call        PrintStr
+        lea         rcx, [endl]
+        call        PrintStr
+
+        lea         rcx, [szWinExec]
+        call        Ror13
+        mov         qword [iHash], rax
+
+        mov         rcx, qword [iHash]
+        mov         rdx, 16
+        call        PrintNum
+
         ; Exit
         lea         rcx, [szPause]
         call        system
@@ -244,4 +260,40 @@ PrintStr:
         leave      
         restore_regs
         ret        
-        %pop       
+        %pop
+        
+        
+;; int Ror13 (PSTR pStr)
+;; pStr = rcx
+;; ROR-13 online:   https://asecuritysite.com/hash/ror13_2
+Ror13:
+        save_regs  
+        %push       proc_context
+        %stacksize  flat64
+        %assign     %$localsize 64
+        %local      pStr:qword
+        align_enter %$localsize
+
+        mov         qword [pStr], rcx
+
+        ; Hash loop
+        mov         r10, qword [pStr]
+        mov         r11, 0                     ; Counter
+        mov         r12, 0                     ; Hash
+.nextByte:
+        mov         rbx, 0
+        mov         bl, byte [r10 + r11]       ; Read a byte from string
+        cmp         rbx, 0                     ; Check if current byte = 0
+        je          .endLoop
+
+        ror         r12d, 13                   ; Use r12 to have qword hash, r12d - dword hash
+        add         r12, rbx
+        inc         r11
+        jmp         .nextByte
+.endLoop:
+        mov         rax, r12                   ; Return hash
+
+        leave      
+        restore_regs
+        ret        
+        %pop
