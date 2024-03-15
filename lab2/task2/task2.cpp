@@ -4,6 +4,8 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
+using namespace std;
+
 int main() 
 {
     LPCSTR ipv4 = "127.0.0.1";
@@ -17,7 +19,7 @@ int main()
     int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (iResult != 0) 
     {
-        std::cout << "WSAStartup failed: " << iResult << "\n";
+        cout << "WSAStartup failed: " << iResult << endl;
         return 1;
     }
 
@@ -30,7 +32,7 @@ int main()
     iResult = getaddrinfo(ipv4, port, &hints, &result);
     if (iResult != 0) 
     {
-        std::cout << "getaddrinfo failed: " << iResult << "\n";
+        cout << "getaddrinfo failed: " << iResult << endl;
         WSACleanup();
         return 1;
     }
@@ -42,7 +44,7 @@ int main()
     // Check for errors to ensure that the socket is a valid socket
     if (ConnectSocket == INVALID_SOCKET) 
     {
-        std::cout << "Error at socket: " << WSAGetLastError() << "\n";
+        cout << "Error at socket: " << WSAGetLastError() << endl;
         freeaddrinfo(result);
         WSACleanup();
         return 1;
@@ -60,13 +62,16 @@ int main()
 
     if (ConnectSocket == INVALID_SOCKET) 
     {
-        std::cout << "Unable to connect to server!\n";
+        cout << "Unable to connect to server!" << endl;
         WSACleanup();
         return 1;
     }
 
     // Connection successful
-    std::cout << "Successfully connected to localhost on port 8080\n";
+    cout << "Successfully connected to localhost on port " << port << endl;
+
+    system("pause");
+
 
     // cleanup
     closesocket(ConnectSocket);
