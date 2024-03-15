@@ -253,7 +253,7 @@ GetKernel32ProcAddress:
         mov         ecx, [rbx + 0x10]          ; Base (ordinals of functions start from this number)
         mov         qword [iBase], rcx
 
-        mov         ecx, [rbx + 0x14]          ; NumberOfNames
+        mov         ecx, [rbx + 0x18]          ; NumberOfNames
         mov         qword [cNames], rcx
 
         mov         ecx, [rbx + 0x1c]          ; AddressOfFunctions RVA
@@ -287,7 +287,6 @@ GetKernel32ProcAddress:
         cmp         r15, qword [cNames]        ; Max num of iterations = NumberOfNames
         jne         .nextName
 .endLoop:
-
         ; Find ordinal
         mov         rax, 0
         mov         r12, qword [pNameOrdinals]
@@ -296,7 +295,7 @@ GetKernel32ProcAddress:
         add         rax, qword [iBase]         ; Base is a value of the 1st ordinal (it can be 1, 2, ... N)
         mov         qword [iOrdinal], rax
 
-
+        
         ; Find address
         mov         rax, 0
         mov         r12, qword [pFunctions]
