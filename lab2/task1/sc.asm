@@ -4,7 +4,7 @@
 ;; $ nasm -f win64 exp.asm -o exp.obj && gcc exp.obj -o exp.exe && ./exp.exe
 ;;
 ;; Compile shellcode:
-;; $ nasm -f bin sc.asm -o sc.obj && python patcher.py && ./outnew.exe
+;; $ nasm -f bin sc.asm -o sc.obj && python inject.py && ./infected.exe
 ;;
 ;; Format:  https://github.com/dedkuzmich/nasmfmt_operands_indent
 ;; $ nasmfmt -oi 12 exp.asm
