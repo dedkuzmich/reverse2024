@@ -1,3 +1,7 @@
+// https://www.codeproject.com/Questions/1244856/Win-winsock-bind-reverse-shell-with-createprocess
+// Client
+// $ socat TCP4:localhost:2291 STDIO
+
 #include <winsock2.h>
 #include <iostream>
 
