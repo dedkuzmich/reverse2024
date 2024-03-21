@@ -4,15 +4,19 @@ from pwn import *
 context.arch = 'i686'
 
 # FOR LINUX
+# env = {'LD_PRELOAD': 'libc.so.6', 'LD_ASLR': 'off'}
 # r = process(['setarch', '-R', './10101_YAKOBCHUK_Dmytro'], env = env)
 # pause()
 
 # FOR WSL2
-r = process(['setarch', '-R', './10101_YAKOBCHUK_Dmytro'])
-pid = util.proc.pidof(r)[0]
-cmd = f"cmd.exe /c start wt -p 'PowerShell' -d . wsl -e bash -c 'gdb -p {pid}\; exec $BASH'"
-os.system(cmd)
-util.proc.wait_for_debugger(pid)
+env = {'LD_PRELOAD': 'libc.so.6', 'LD_ASLR': 'off'}
+r = process(['setarch', '-R', './10101_YAKOBCHUK_Dmytro'], env = env)
+debug = True
+if debug == True:
+    pid = util.proc.pidof(r)[0]
+    cmd = f"cmd.exe /c start wt -p 'PowerShell' -d . wsl -e bash -c 'gdb -p {pid}\; exec $BASH'"
+    os.system(cmd)
+    util.proc.wait_for_debugger(pid)
 
 sc = asm(shellcraft.cat('10101_YAKOBCHUK_Dmytro.secret') + shellcraft.echo('\n') + shellcraft.exit(13))
 
