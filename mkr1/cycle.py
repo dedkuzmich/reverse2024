@@ -4,8 +4,10 @@ from pwn import *
 def get_breaks(code):
     lines = code.strip().split('\n')
     for line in lines:
-        addr = line.split(":")[1].split(" ")[0]
-        print(f"br *0x{addr}")
+        addr_str = line.split(":")[1].split(" ")[0]
+        addr_int = int(addr_str, 16)
+        addr_hex = hex(addr_int)
+        print(f"br *{addr_hex}")
 
 
 def main():
@@ -22,13 +24,18 @@ def main():
     print("\n------------")
     # IDA code:
     code = """
-    .text:08049ECC                 lea     esp, [ebp-0Ch]
-    .text:08049ECF                 pop     ecx
-    .text:08049ED0                 pop     ebx
-    .text:08049ED1                 pop     edi
-    .text:08049ED2                 pop     ebp
-    .text:08049ED3                 lea     esp, [ecx-4]
-    .text:08049ED6                 retn
+    ext:0000000000401EFF                 cmp     eax, 539h
+    .text:0000000000401F04                 jz      short loc_401F10
+    .text:0000000000401F06                 mov     edi, 1
+    .text:0000000000401F0B                 call    sub_4102F0
+    .text:0000000000401F10 ; ---------------------------------------------------------------------------
+    .text:0000000000401F10
+    .text:0000000000401F10 loc_401F10:                             ; CODE XREF: sub_401E41+C3↑j
+    .text:0000000000401F10                 lea     rdi, aAccessGranted ; "ACCESS GRANTED!"
+    .text:0000000000401F17                 call    sub_411C50
+    .text:0000000000401F1C                 mov     eax, 0
+    .text:0000000000401F21                 leave
+    .text:0000000000401F22                 retn
     """
     get_breaks(code)
 
