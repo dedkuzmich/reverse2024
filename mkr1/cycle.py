@@ -2,11 +2,14 @@ from pwn import *
 
 
 def get_breaks(code):
-    lines = code.strip().split('\n')
+    lines = code.strip().split("\n")
+    addresses = []
     for line in lines:
-        addr_str = line.split(":")[1].split(" ")[0]
-        addr_int = int(addr_str, 16)
-        addr_hex = hex(addr_int)
+        addr_str = line.split(":")[1].split(" ")[0]  # Extract 0000000000401EFF
+        addresses.append(int(addr_str, 16))  # Convert 0000000000401EFF to 401eff
+    addresses = list(dict.fromkeys(addresses))  # Unique entries only
+    for addr in addresses:
+        addr_hex = hex(addr)
         print(f"br *{addr_hex}")
 
 
