@@ -131,7 +131,7 @@ def main():
     find_bad_bytes(buf)
 
     # RUN PROCESS
-    buf = cyclic(5000)
+    # buf = cyclic(5000)
     p = run_locally(payload = True, debug = True)
     # p = remote(IP, PORT)
 
