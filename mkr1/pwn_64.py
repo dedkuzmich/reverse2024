@@ -133,7 +133,7 @@ def main():
 
     # RUN PROCESS
     # buf = cyclic(5000)
-    p = run_locally(payload = True, debug = False)
+    p = run_locally(payload = True, debug = True)
     # p = remote(IP, PORT)
 
     log.info("=== buffer")
